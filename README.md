@@ -1,155 +1,140 @@
-# ShellFerry (Unified SSH Terminal & Dual-Pane SFTP Client)
-
-> **Formerly OpenTerm.** Renamed in v0.8.0 to stop clashing with an unrelated Windows app of the same name. Existing data migrates automatically.
+# ShellFerry
 
 <p align="center">
-  <img src="app-icon.svg" width="128" height="128" alt="ShellFerry Logo" />
+  <img src="app-icon.svg" width="96" height="96" alt="ShellFerry Logo" />
 </p>
 
 <p align="center">
-  A high-performance, lightweight, dual-purpose SSH terminal and dual-pane SFTP file manager built on top of <strong>Tauri 2</strong>, <strong>React 19</strong>, <strong>Tailwind CSS v4</strong>, <strong>Zustand</strong>, <strong>xterm.js</strong>, and <strong>Rust</strong>.
+  <strong>Fast, lightweight SSH terminal and dual-pane SFTP client.</strong><br />
+  Built on Tauri 2, Rust, React 19, and xterm.js. Native speed, zero Electron bloat.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tauri-2.0-blue?logo=tauri" alt="Tauri 2" />
-  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss" alt="Tailwind CSS v4" />
-  <img src="https://img.shields.io/badge/Rust-1.80+-orange?logo=rust" alt="Rust" />
-  <img src="https://img.shields.io/badge/Memory-80--150MB-emerald" alt="Memory Footprint" />
+  <a href="https://github.com/rzkfyn/openterm/releases"><img src="https://img.shields.io/github/v/release/rzkfyn/openterm?style=flat-square" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/RAM-80--150MB-emerald?style=flat-square" alt="Memory Footprint" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="Platforms" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-yellow?style=flat-square" alt="License" /></a>
+</p>
+
+> *Formerly OpenTerm. Renamed in v0.8.0. Data migrates automatically.*
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="ShellFerry Terminal and Dual-Pane SFTP Split View" width="100%" />
 </p>
 
 ---
 
-## Highlights & Architecture
+## Downloads
 
-- **Ultra-Lightweight Footprint (80MB - 150MB)**: Uses native OS webviews via Tauri 2 rather than bundling heavy Chromium instances (like Termius/Electron).
-- **Direct PTY Streaming**: Raw pseudo-terminal byte I/O streamed from Rust directly to `xterm.js` over Tauri event emitters, bypassing standard IPC invoke serialization bottlenecks.
-- **Zero-Binary in JavaScript Rule**: SFTP file downloads and uploads transfer directly between the remote SSH socket and local disk in Rust (128 KB buffered native stream). File binaries **never** pass through JS runtime memory.
-- **Chunked Directory Queries**: Traversal of remote and local folders is paginated across IPC to protect serialization buffers from large directory trees.
-- **Virtualized Dual-Pane Explorer**: Powered by `@tanstack/react-virtual` to smoothly render thousands of files with minimal DOM nodes.
-- **Awwwards / Linear-Tier Visual Design**: Built using the `high-end-visual-design` standard—featuring Ethereal Glass OLED aesthetics, double-bezel hardware enclosures, button-in-button trailing icons, custom Plus Jakarta Sans typography, and fluid micro-motion.
+Download installers from [Latest Release](https://github.com/rzkfyn/openterm/releases/latest):
+
+| Platform | Format |
+| --- | --- |
+| **Windows** | `.msi` / `.exe` (x64, arm64) |
+| **macOS** | `.dmg` (Apple Silicon, Intel) |
+| **Linux** | `.deb` / `.AppImage` (x64) |
 
 ---
 
-## Features
+## Comparison
 
-- [x] **Multi-session Management**: Open, reconnect, and switch between multiple remote SSH connections with live status indicators.
-- [x] **Interactive Terminal Shell**: Full `xterm-256color` compatibility with auto-fit resizing, web links, and buffer preservation across reconnections.
-- [x] **Dual-Pane File Manager**: Side-by-side local filesystem and remote SFTP explorer with virtualized scrolling.
-- [x] **In-App Remote File Editor**: Edit remote and local config, text, or script files with syntax highlighting and direct disk-to-socket saving.
-- [x] **Visual Permissions Manager (chmod)**: Inspect and edit Unix octal permissions (`0755`, `0644`) and user/group/other bit flags.
-- [x] **Transfer Conflict Resolution**: Side-by-side comparison modal with 5 resolution actions (Overwrite, Overwrite Newer, Overwrite if Size Differs, Auto-Rename `(n)`, Skip) and batch application.
-- [x] **Two-Factor Authentication (2FA) & Dual Biometric Passkey**: RFC 6238 TOTP authenticator protection alongside native OS biometrics (Windows Hello fingerprint, face, PIN). Includes auto-submit on 6th digit without error flicker, 8 emergency backup codes, and configurable idle auto-lock.
-- [x] **Mandatory App Protection Onboarding Gate**: Requiring at least one protection method (Windows Hello or 2FA) before saving passwords or private key passphrases to disk, while leaving transient quick connections friction-free.
-- [x] **Bi-Directional PTY <-> SFTP Directory Sync**: Automatic synchronization between terminal working directory and remote SFTP file explorer with navigation loop guards and quick toggle.
-- [x] **Quick Commands (Snippets)**: Pre-configured and host-customizable snippet runner (`Commands` dropdown) with instant execution and automatic terminal focus restoration.
-- [x] **Encrypted Profile Vault & Reminder**: Master password security encrypting saved host credentials using PBKDF2-HMAC-SHA256 (100k rounds) and AES-256-GCM (`vault.enc`), with an unobtrusive dashboard reminder for unencrypted credentials.
-- [x] **Connection Resilience & Auto-Reconnect**: TCP keepalive probes (15s) and automatic exponential backoff reconnection worker (1s, 2s, 4s, 8s, 16s) that preserves terminal buffers and directory locations.
-- [x] **SFTP Quick Search & Multi-Token Filter (`Ctrl+F`)**: Real-time tokenized search across directory contents with matching items counter, folder-change auto-reset, and OS search shortcut interception.
-- [x] **FileZilla-Style Drag-and-Drop Transfers**: Drag files between local and remote panes, into target folders, or directly from OS file explorer.
-- [x] **Keyboard Shortcuts**:
-  - `F5` / `Ctrl+R`: Refresh directory
-  - `F2`: Rename file/folder
-  - `Delete`: Delete file/folder
-  - `Ctrl+N`: Create new file
-  - `Ctrl+Shift+N`: Create new folder
-  - `Ctrl+F`: Focus search & filter bar
-  - `Ctrl+L` / `Alt+D`: Focus editable path bar
-  - `Enter`: Open folder / edit file
-  - `Backspace` / `Alt+Up`: Navigate to parent directory
-- [x] **Resizable Split Views**:
-  - **Terminal Full View**: Maximized command-line workflow.
-  - **Dual Split View**: Draggable split between Terminal and SFTP explorer.
-  - **SFTP Full View**: Fullscreen file manager experience with draggable Local vs. Remote split.
+| Feature | ShellFerry | Termius | FileZilla | PuTTY |
+| --- | :---: | :---: | :---: | :---: |
+| **Terminal + SFTP Unified** | **Yes** | Yes | No (SFTP only) | No (SSH only) |
+| **Memory Footprint** | **80–150 MB** | 400–800 MB | 100–200 MB | ~30 MB |
+| **Runtime** | **Tauri 2 (Native Webview)** | Electron (Chromium) | C++ / wxWidgets | C / Win32 |
+| **Biometric & 2FA Vault** | **Yes** | Paid plan | No | No |
+| **License** | **Apache 2.0 (Open Source)** | Proprietary | Open Source | Open Source |
+
+---
+
+## Key Features
+
+### ⚡ Performance & Core Engine
+- **Lightweight (80–150 MB RAM)**: Tauri 2 uses native OS webviews instead of bundling Chromium.
+- **Direct PTY Streaming**: Rust streams raw pseudo-terminal bytes straight to `xterm.js` via event emitters, avoiding IPC serialization overhead.
+- **Zero-Binary JavaScript Rule**: SFTP file transfers run directly between SSH socket and local disk in native Rust (128 KB buffered stream). JS runtime never touches file binaries.
+- **Virtualized File Explorer**: Smooth rendering for directories with thousands of files powered by `@tanstack/react-virtual`.
+
+### 🖥️ Unified Terminal & File Sync
+- **Bidirectional PTY ↔ SFTP Sync**: Terminal working directory and SFTP remote pane stay in sync automatically.
+- **Multi-Session Tabs**: Connect, switch, and monitor multiple SSH hosts simultaneously.
+- **Resilient Auto-Reconnect**: TCP keepalives (15s) and exponential backoff keep connections alive and restore buffers after dropouts.
+- **Flexible Split Layouts**: Switch instantly between full terminal, full SFTP, or resizable dual split.
+
+### 📁 SFTP File Management
+- **Drag-and-Drop**: Transfer files between local/remote panes, target folders, or directly from OS file explorer.
+- **In-App Code Editor**: Built-in editor with syntax highlighting for remote and local configuration files.
+- **Transfer Conflict Resolution**: Side-by-side comparison with Overwrite, Overwrite Newer, Size Differs, Auto-Rename, and Skip actions.
+- **Quick Search & Filter (`Ctrl+F`)**: Real-time multi-token search across current directory contents.
+- **Visual Permissions (chmod)**: Inspect and adjust octal permissions (`0755`, `0644`) and flag bits visually.
+
+### 🔒 Security & Vault
+- **Encrypted Profile Vault**: Host credentials encrypted with PBKDF2-HMAC-SHA256 (100k rounds) + AES-256-GCM (`vault.enc`).
+- **Biometrics & 2FA**: Native OS passkeys (Windows Hello fingerprint/face/PIN) and RFC 6238 TOTP authenticators.
+- **Protection Gate**: Requires biometric or 2FA setup before saving credentials to disk.
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action | Shortcut | Action |
+| --- | --- | --- | --- |
+| `F5` / `Ctrl+R` | Refresh directory | `Ctrl+F` | Focus search & filter bar |
+| `F2` | Rename item | `Ctrl+L` / `Alt+D` | Focus address bar |
+| `Delete` | Delete item | `Enter` | Open folder / edit file |
+| `Ctrl+N` | Create new file | `Backspace` / `Alt+Up` | Go to parent directory |
+| `Ctrl+Shift+N` | Create new folder | | |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
+| Layer | Stack |
 | --- | --- |
-| **Core Desktop Engine** | [Tauri 2](https://v2.tauri.app/) |
+| **Desktop Engine** | [Tauri 2](https://v2.tauri.app/) |
 | **Backend / Systems** | Rust, `ssh2-rs` (`libssh2`), `tokio`, `parking_lot` |
-| **Frontend Framework** | [React 19](https://react.dev/), TypeScript, [Vite](https://vite.dev/) |
-| **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) (`@tailwindcss/vite`) |
-| **Terminal Emulator** | [xterm.js](https://xtermjs.org/) + Fit Addon + Web Links Addon |
+| **Frontend** | [React 19](https://react.dev/), TypeScript, [Tailwind CSS v4](https://tailwindcss.com/) |
+| **Terminal** | [xterm.js](https://xtermjs.org/) + Fit & Web Links addons |
 | **Virtualization** | [`@tanstack/react-virtual`](https://tanstack.com/virtual/latest) |
-| **State Management** | [Zustand](https://github.com/pmndrs/zustand) |
-| **Icons** | [Lucide React](https://lucide.dev/) |
+| **State & Icons** | [Zustand](https://github.com/pmndrs/zustand), [Lucide React](https://lucide.dev/) |
 
 ---
 
-## Getting Started
+## Development & Build
 
 ### Prerequisites
+- [Bun](https://bun.sh/) (or Node 20+)
+- [Rust](https://rustup.rs/) (1.80+)
+- C compiler & `pkg-config` / `libssl-dev` (Linux)
 
-1. **Bun** (or Node.js 20+ / npm):
-   ```bash
-   curl -fsSL https://bun.sh/install | bash
-   ```
-2. **Rust & Cargo**:
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-3. **C Compiler & CMake / pkg-config** (required by `libssh2-sys`):
-   - **macOS**: `xcode-select --install`
-   - **Linux (Ubuntu/Debian)**: `sudo apt install build-essential pkg-config libssl-dev`
-
----
-
-### Installation & Development
-
-1. **Clone repository**:
-   ```bash
-   git clone https://github.com/rzkfyn/openterm.git
-   cd openterm
-   ```
-
-2. **Install frontend dependencies**:
-   ```bash
-   bun install
-   ```
-
-3. **Run in development mode**:
-   ```bash
-   bun run tauri dev
-   ```
-
----
-
-### Testing & Quality Checks
-
-Run frontend unit tests:
+### Run Locally
 ```bash
-bun run test
+git clone https://github.com/rzkfyn/openterm.git
+cd openterm
+bun install
+bun run tauri dev
 ```
 
-Run Rust backend tests:
+### Test & Package
 ```bash
-cd src-tauri && cargo test
-```
-
-Build production bundle:
-```bash
-bun run tauri build
+bun test                    # Frontend unit tests
+cd src-tauri && cargo test  # Rust backend tests
+bun run tauri build         # Production executable
 ```
 
 ---
 
-### Reporting Issues & Feedback
+## Feedback & Issues
 
-Encountered a bug or have an idea to make ShellFerry better? We welcome issues and contributions!
+- **[Report Bug](https://github.com/rzkfyn/openterm/issues/new?template=bug_report.yml)**: Issue tracker for crashes or broken workflows.
+- **[Request Feature](https://github.com/rzkfyn/openterm/issues/new?template=feature_request.yml)**: Suggestions and enhancements.
+- **[Discussions](https://github.com/rzkfyn/openterm/discussions)**: General setup questions and community discussions.
 
-- **[Report a Bug](https://github.com/rzkfyn/openterm/issues/new?template=bug_report.yml)**: Use this form if something is broken, crashing, or misbehaving.
-- **[Request a Feature](https://github.com/rzkfyn/openterm/issues/new?template=feature_request.yml)**: Suggest improvements, new tools, or UX enhancements.
-- **[GitHub Discussions](https://github.com/rzkfyn/openterm/discussions)**: Ask general questions, share configurations, and connect with other users.
-
-> **Privacy Notice**: When reporting issues or attaching logs/screenshots, **never include private keys, credentials, or sensitive server URLs**.
+> **Note**: Never post private keys, passwords, or server addresses in issue reports.
 
 ---
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 the ShellFerry contributors.
-
-"ShellFerry" and the ShellFerry logo identify this project; the license does not grant permission to use them for forks or derived products (Apache-2.0 §6).
+Licensed under [Apache License 2.0](LICENSE). Copyright 2026 ShellFerry contributors.
