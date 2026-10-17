@@ -45,3 +45,9 @@ A secure temporary storage directory on the local machine used when opening remo
 
 ### File Clipboard Copy
 The operation of copying file paths and platform-compatible drop URIs to the operating system clipboard for rapid pasting into terminals or file managers.
+
+### Default View Mode
+The View Mode automatically applied when a new Active Session is opened. Reconnects and tab switches keep the current View Mode.
+
+### Auto-Lock Timeout
+Whole minutes (1-1440) of inactivity before the app locks, or disabled. Only applies when 2FA or biometrics is enabled.

@@ -7,6 +7,10 @@ import { useTotpStore } from '../../stores/totpStore';
 import { useBiometricStore } from '../../stores/biometricStore';
 import { getBiometricName } from '../../utils/platform';
 
+export const IDLE_PRESETS = [0, 5, 15, 30, 60];
+export const MIN_IDLE_MINS = 1;
+export const MAX_IDLE_MINS = 1440;
+
 interface TotpModalProps {
   isOpen: boolean;
   config: TotpConfig;
@@ -26,6 +30,8 @@ export const TotpModal: React.FC<TotpModalProps> = ({
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [disableCode, setDisableCode] = useState('');
   const [selectedTimeout, setSelectedTimeout] = useState<number>(config.idleTimeoutMins || 15);
+  const [customMode, setCustomMode] = useState<boolean>(!IDLE_PRESETS.includes(config.idleTimeoutMins ?? 15));
+  const [customValue, setCustomValue] = useState<string>(String(config.idleTimeoutMins ?? 15));
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -148,6 +154,13 @@ export const TotpModal: React.FC<TotpModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const commitCustom = () => {
+    const n = Math.round(Number(customValue));
+    const clamped = Math.min(MAX_IDLE_MINS, Math.max(MIN_IDLE_MINS, Number.isFinite(n) ? n : 15));
+    setCustomValue(String(clamped));
+    handleSaveTimeout(clamped);
   };
 
   const handleSaveTimeout = async (mins: number) => {
@@ -305,8 +318,16 @@ export const TotpModal: React.FC<TotpModalProps> = ({
                 </div>
                 <div className="relative w-44 shrink-0">
                   <select
-                    value={selectedTimeout}
-                    onChange={(e) => handleSaveTimeout(Number(e.target.value))}
+                    value={customMode ? 'custom' : selectedTimeout}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        setCustomMode(true);
+                        setCustomValue(String(selectedTimeout > 0 ? selectedTimeout : 15));
+                      } else {
+                        setCustomMode(false);
+                        handleSaveTimeout(Number(e.target.value));
+                      }
+                    }}
                     className="w-full rounded-md bg-[#181824] border border-[#2a2b38] focus:border-indigo-500/80 pl-3 pr-8 py-1.5 text-xs text-slate-100 outline-none transition-colors appearance-none cursor-pointer"
                   >
                     <option value={5} className="bg-[#181824] text-slate-200">5 Minutes</option>
@@ -314,8 +335,24 @@ export const TotpModal: React.FC<TotpModalProps> = ({
                     <option value={30} className="bg-[#181824] text-slate-200">30 Minutes</option>
                     <option value={60} className="bg-[#181824] text-slate-200">1 Hour</option>
                     <option value={0} className="bg-[#181824] text-slate-200">Disabled (Manual only)</option>
+                    <option value="custom" className="bg-[#181824] text-slate-200">Custom…</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  {customMode && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="number"
+                        min={MIN_IDLE_MINS}
+                        max={MAX_IDLE_MINS}
+                        value={customValue}
+                        onChange={(e) => setCustomValue(e.target.value)}
+                        onBlur={commitCustom}
+                        onKeyDown={(e) => { if (e.key === 'Enter') commitCustom(); }}
+                        className="w-20 rounded-md bg-[#181824] border border-[#2a2b38] focus:border-indigo-500/80 px-2 py-1.5 text-xs text-slate-100 outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400">minutes (1–1440)</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -31,12 +31,15 @@ describe('2FA QR Code & URI Generation', () => {
   });
 
   it('validates idle timeout boundaries including 0 (disabled)', () => {
-    const isValidIdleTimeout = (mins: number) => [0, 5, 15, 30, 60].includes(mins);
+    const isValidIdleTimeout = (mins: number) => mins === 0 || (Number.isInteger(mins) && mins >= 1 && mins <= 1440);
     expect(isValidIdleTimeout(0)).toBe(true);
     expect(isValidIdleTimeout(5)).toBe(true);
     expect(isValidIdleTimeout(15)).toBe(true);
     expect(isValidIdleTimeout(30)).toBe(true);
     expect(isValidIdleTimeout(60)).toBe(true);
-    expect(isValidIdleTimeout(10)).toBe(false);
+    expect(isValidIdleTimeout(10)).toBe(true);
+    expect(isValidIdleTimeout(1440)).toBe(true);
+    expect(isValidIdleTimeout(1441)).toBe(false);
+    expect(isValidIdleTimeout(-1)).toBe(false);
   });
 });

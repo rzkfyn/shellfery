@@ -487,10 +487,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* TAB: SFTP EXPLORER */}
             {activeTab === 'sftp' && (
               <div className="space-y-4">
-                {/* Default Session View Mode */}
+                {/* Default View Mode Mode */}
                 <div>
                   <label className="block text-xs font-medium text-slate-200 mb-1">
-                    Default Session View
+                    Default View Mode
                   </label>
                   <p className="text-[11px] text-slate-400 mb-2">
                     Layout to open automatically when connecting to an SSH profile.

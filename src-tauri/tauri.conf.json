@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ShellFerry",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "identifier": "io.github.rzkfyn.shellferry",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

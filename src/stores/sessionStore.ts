@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useSettingsStore } from './settingsStore';
 import { SessionConfig, ViewMode, ConnectionBookmark } from '../types';
 import { tauriApi } from '../services/tauri';
 import { useFileManagerStore } from './fileManagerStore';
@@ -180,7 +181,9 @@ export const useSessionStore = create<SessionState>((set) => ({
         await tauriApi.sshConnect({ ...config, id: sessionId });
 
         const sessionWithId: SessionConfig = { ...config, id: sessionId, status: 'connected' };
+        const isFreshSession = !useSessionStore.getState().activeSessions.some((s) => s.id === sessionId);
         set((state) => ({
+          ...(isFreshSession ? { viewMode: useSettingsStore.getState().settings.defaultViewMode } : {}),
           activeSessions: [...state.activeSessions.filter((s) => s.id !== sessionId), sessionWithId],
           currentSessionId: sessionId,
           isConnecting: false,
