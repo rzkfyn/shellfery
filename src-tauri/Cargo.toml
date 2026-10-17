@@ -1,6 +1,6 @@
 [package]
 name = "shellferry"
-version = "0.8.0"
+version = "0.8.2"
 description = "Lightweight Dual SSH & SFTP Client"
 authors = ["ShellFerry Contributors"]
 license = "Apache-2.0"
