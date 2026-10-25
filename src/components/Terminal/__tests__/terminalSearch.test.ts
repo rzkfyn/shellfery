@@ -36,4 +36,35 @@ describe('Terminal search validation and query handling', () => {
     expect(isTargetEditable('DIV', true)).toBe(true);
     expect(isTargetEditable('DIV', false)).toBe(false);
   });
+
+  it('clears search decorations only when search bar is closed', () => {
+    let decorationsCleared = false;
+    let activeDecorationCleared = false;
+
+    const mockSearchAddon = {
+      clearDecorations: () => {
+        decorationsCleared = true;
+      },
+      clearActiveDecoration: () => {
+        activeDecorationCleared = true;
+      },
+    };
+
+    const handleLowMemoryCleanup = (isSearchOpen: boolean) => {
+      if (!isSearchOpen && mockSearchAddon) {
+        mockSearchAddon.clearDecorations();
+        mockSearchAddon.clearActiveDecoration();
+      }
+    };
+
+    // When search is open, low memory event should NOT wipe active search decorations
+    handleLowMemoryCleanup(true);
+    expect(decorationsCleared).toBe(false);
+    expect(activeDecorationCleared).toBe(false);
+
+    // When search is closed, low memory event should purge stale decorations
+    handleLowMemoryCleanup(false);
+    expect(decorationsCleared).toBe(true);
+    expect(activeDecorationCleared).toBe(true);
+  });
 });

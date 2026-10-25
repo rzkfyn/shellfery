@@ -18,6 +18,10 @@ export const tauriApi = {
     return await invoke<string>('ping');
   },
 
+  trimMemory: async (): Promise<void> => {
+    return await invoke<void>('trim_memory');
+  },
+
   openUrl: async (url: string): Promise<void> => {
     return await invoke<void>('open_url', { url });
   },
@@ -296,6 +300,14 @@ export const tauriApi = {
   ): Promise<UnlistenFn> => {
     return await listen<TransferProgress>(`transfer:progress:${transferId}`, (event) => {
       callback(event.payload);
+    });
+  },
+
+  onSystemLowMemory: async (
+    callback: () => void
+  ): Promise<UnlistenFn> => {
+    return await listen('system-low-memory', () => {
+      callback();
     });
   },
 

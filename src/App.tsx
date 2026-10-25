@@ -16,6 +16,8 @@ import { SecurityOnboardingModal } from './components/Modal/SecurityOnboardingMo
 import { TotpModal } from './components/Modal/TotpModal';
 import { SettingsModal } from './components/Modal/SettingsModal';
 import { ChangelogModal } from './components/Modal/ChangelogModal';
+import { PrivacyConsentModal, PRIVACY_STORAGE_KEY } from './components/Modal/PrivacyConsentModal';
+import { BugReportModal } from './components/Modal/BugReportModal';
 import { Dashboard } from './components/Dashboard/Dashboard';
 import { SessionConfig, SavedConnection } from './types';
 import { useBiometricStore } from './stores/biometricStore';
@@ -27,6 +29,7 @@ export default function App() {
   const [modalMode, setModalMode] = useState<ModalMode>('new');
   const [editingConnection, setEditingConnection] = useState<SavedConnection | null>(null);
   const [connectTarget, setConnectTarget] = useState<SavedConnection | null>(null);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
 
   // App Lock 2FA & Biometric state
   const [isAppLocked, setIsAppLocked] = useState(false);
@@ -64,6 +67,13 @@ export default function App() {
 
   // Check 2FA config on launch
   useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      const acknowledged = localStorage.getItem(PRIVACY_STORAGE_KEY);
+      if (!acknowledged) {
+        setIsPrivacyModalOpen(true);
+      }
+    }
+
     checkBiometricAvailability();
     loadTotpConfig().then((cfg) => {
       const bioEnabled = useBiometricStore.getState().isEnabled;
@@ -386,6 +396,15 @@ export default function App() {
 
       {/* In-App Changelog Modal */}
       <ChangelogModal />
+
+      {/* First-Launch Privacy Consent Modal */}
+      <PrivacyConsentModal
+        isOpen={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
+
+      {/* In-App Bug & Feedback Reporting Modal */}
+      <BugReportModal />
     </div>
   );
 }

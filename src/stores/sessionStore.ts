@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { listen } from '@tauri-apps/api/event';
 import { useSettingsStore } from './settingsStore';
 import { SessionConfig, ViewMode, ConnectionBookmark } from '../types';
 import { tauriApi } from '../services/tauri';
@@ -11,11 +12,50 @@ import { useSavedConnectionStore } from './savedConnectionStore';
 const sessionListeners = new Map<string, () => void>();
 const sessionClosedListeners = new Map<string, () => void>();
 const sessionLiveCallbacks = new Map<string, (chunk: string) => void>();
-const sessionOutputHistory = new Map<string, string[]>();
+export const sessionOutputHistory = new Map<string, string[]>();
 const intentionalDisconnects = new Set<string>();
 const reconnectAttemptsMap = new Map<string, number>();
 const reconnectTimerMap = new Map<string, any>();
 const inFlightConnections = new Map<string, Promise<string>>();
+
+const lowMemoryCleanups = new Set<() => void>();
+
+export function registerLowMemoryCleanup(callback: () => void): () => void {
+  lowMemoryCleanups.add(callback);
+  return () => {
+    lowMemoryCleanups.delete(callback);
+  };
+}
+
+export function trimInactiveSessionHistories(retainChunks = 200): void {
+  const currentSessionId = useSessionStore.getState().currentSessionId;
+  for (const [sessionId, history] of sessionOutputHistory.entries()) {
+    if (sessionId !== currentSessionId && history.length > retainChunks) {
+      history.splice(0, history.length - retainChunks);
+    }
+  }
+}
+
+export function handleSystemLowMemory(): void {
+  trimInactiveSessionHistories(200);
+  for (const cleanup of lowMemoryCleanups) {
+    try {
+      cleanup();
+    } catch (err) {
+      console.warn('Low memory cleanup callback error:', err);
+    }
+  }
+  console.warn('[ShellFerry] System low memory pressure detected, caches trimmed');
+}
+
+// Global listener for system low memory events
+if (typeof window !== 'undefined') {
+  listen('system-low-memory', () => {
+    handleSystemLowMemory();
+  }).catch(() => {
+    // Suppressed when running outside Tauri runtime (e.g., test environment)
+  });
+}
 
 function emitTerminalNotice(sessionId: string, message: string) {
   const history = sessionOutputHistory.get(sessionId);

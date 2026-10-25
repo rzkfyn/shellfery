@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, ISearchOptions } from '@xterm/addon-search';
+import { listen } from '@tauri-apps/api/event';
 import { tauriApi } from '../../services/tauri';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -10,6 +11,7 @@ import {
   useSessionStore,
   attachTerminalSubscriber,
   detachTerminalSubscriber,
+  registerLowMemoryCleanup,
 } from '../../stores/sessionStore';
 import { useFileManagerStore } from '../../stores/fileManagerStore';
 import { parseOsc7Path, syncCoordinator } from '../../utils/syncUtils';
@@ -20,17 +22,51 @@ import {
   KeyboardSelectionState,
 } from './terminalSelection';
 
-export function useTerminalSession(sessionId: string | null, onTriggerSearch?: () => void) {
+export function useTerminalSession(
+  sessionId: string | null,
+  onTriggerSearch?: () => void,
+  isSearchOpen: boolean = false
+) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const onTriggerSearchRef = useRef(onTriggerSearch);
   onTriggerSearchRef.current = onTriggerSearch;
+  const isSearchOpenRef = useRef(isSearchOpen);
+  isSearchOpenRef.current = isSearchOpen;
 
   const [searchResult, setSearchResult] = useState<{ resultIndex: number; resultCount: number } | null>(null);
   const currentTheme = useThemeStore((s) => s.theme);
   const settings = useSettingsStore((s) => s.settings);
+
+  // Clear search decorations / highlights when system low memory event triggers and search is closed
+  useEffect(() => {
+    const handleLowMemory = () => {
+      if (!isSearchOpenRef.current && searchAddonRef.current) {
+        try {
+          searchAddonRef.current.clearDecorations();
+          searchAddonRef.current.clearActiveDecoration();
+        } catch (err) {
+          console.warn('xterm clearDecorations error:', err);
+        }
+        setSearchResult(null);
+      }
+    };
+
+    const unregister = registerLowMemoryCleanup(handleLowMemory);
+    let unlistenTauri: (() => void) | null = null;
+    listen('system-low-memory', handleLowMemory)
+      .then((fn) => {
+        unlistenTauri = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      unregister();
+      if (unlistenTauri) unlistenTauri();
+    };
+  }, []);
 
   // Sync theme changes to live xterm instance
   useEffect(() => {

@@ -23,6 +23,17 @@ fn ping() -> &'static str {
 }
 
 #[tauri::command]
+fn trim_memory() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
+        SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX)
+            .map_err(|e| format!("Failed to trim working set: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("Only http and https URLs are allowed".to_string());
@@ -531,12 +542,89 @@ async fn biometric_authenticate(reason: String) -> Result<bool, String> {
     .map_err(|e| format!("Task execution failed: {e}"))?
 }
 
+#[cfg(target_os = "windows")]
+fn configure_webview2_environment() {
+    let flags = "--disable-features=CalculateNativeWinOcclusion --renderer-process-limit=4 --js-flags=--max-old-space-size=256";
+    let combined = match std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+        Ok(existing) if !existing.trim().is_empty() => format!("{existing} {flags}"),
+        _ => flags.to_string(),
+    };
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", combined);
+}
+
+#[cfg(target_os = "windows")]
+fn init_low_memory_listener(app_handle: AppHandle) {
+    std::thread::Builder::new()
+        .name("low-memory-listener".to_string())
+        .spawn(move || unsafe {
+            use tauri::Emitter;
+            use windows::Win32::Foundation::WAIT_OBJECT_0;
+            use windows::Win32::System::Memory::{
+                CreateMemoryResourceNotification, LowMemoryResourceNotification,
+            };
+            use windows::Win32::System::Threading::{
+                GetCurrentProcess, SetProcessWorkingSetSize, WaitForSingleObject,
+            };
+
+            let handle = match CreateMemoryResourceNotification(LowMemoryResourceNotification) {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("[ShellFerry] Failed to create low memory resource notification: {e}");
+                    return;
+                }
+            };
+
+            loop {
+                let wait_res = WaitForSingleObject(handle, 5000);
+                if wait_res == WAIT_OBJECT_0 {
+                    let _ = SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+                    let _ = app_handle.emit("system-low-memory", ());
+                    std::thread::sleep(std::time::Duration::from_secs(15));
+                }
+            }
+        })
+        .expect("Failed to spawn low memory listener thread");
+}
+
+fn setup_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let panic_msg = format!("{panic_info}");
+        eprintln!("[ShellFerry PANIC] {panic_msg}");
+        if let Ok(dir) = paths::config_dir() {
+            let log_path = dir.join("panic.log");
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let log_line = format!("[{timestamp}] PANIC: {panic_msg}\n");
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(log_path) {
+                let _ = file.write_all(log_line.as_bytes());
+            }
+        }
+        default_hook(panic_info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    setup_panic_hook();
+
+    #[cfg(target_os = "windows")]
+    configure_webview2_environment();
+
     let session_manager = SessionManager::new();
     let vault_state = VaultState::new();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -544,6 +632,9 @@ pub fn run() {
         .setup(move |app| {
             app.manage(session_manager);
             app.manage(vault_state);
+
+            #[cfg(target_os = "windows")]
+            init_low_memory_listener(app.handle().clone());
 
             // Migrate legacy data before the main window (and its WebView2 profile) exists.
             // The window is declared with `create: false` in tauri.conf.json for this reason.
@@ -560,6 +651,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            trim_memory,
             open_url,
             list_connections,
             save_connection,

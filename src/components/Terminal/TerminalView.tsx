@@ -38,7 +38,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, sessionNa
     clearSearch,
     searchResult,
     getSelection,
-  } = useTerminalSession(sessionId, handleOpenSearch);
+  } = useTerminalSession(sessionId, handleOpenSearch, isSearchOpen);
   const [contextMenu, setContextMenu] = useState<TerminalContextMenuPosition | null>(null);
   const activeSessions = useSessionStore((s) => s.activeSessions);
   const reconnectSession = useSessionStore((s) => s.reconnectSession);

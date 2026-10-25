@@ -62,3 +62,68 @@ describe('Concurrent Connect Deduplication (Issue #33)', () => {
     expect(useSessionStore.getState().activeSessions.length).toBe(1);
   });
 });
+
+describe('Low Memory Pressure Mitigations', () => {
+  beforeEach(async () => {
+    useSessionStore.setState({
+      activeSessions: [
+        { id: 'session-active', name: 'Active', host: 'host-1', username: 'user', port: 22, authType: 'password' },
+        { id: 'session-inactive-1', name: 'Inactive 1', host: 'host-2', username: 'user', port: 22, authType: 'password' },
+        { id: 'session-inactive-2', name: 'Inactive 2', host: 'host-3', username: 'user', port: 22, authType: 'password' },
+      ],
+      currentSessionId: 'session-active',
+      isConnecting: false,
+      error: null,
+    });
+    const { sessionOutputHistory } = await import('../sessionStore');
+    sessionOutputHistory.clear();
+  });
+
+  it('trims sessionOutputHistory across inactive sessions while retaining active session buffer', async () => {
+    const { sessionOutputHistory, trimInactiveSessionHistories } = await import('../sessionStore');
+
+    // Fill buffers: 500 chunks each
+    const activeChunks = Array.from({ length: 500 }, (_, i) => `active-${i}`);
+    const inactiveChunks1 = Array.from({ length: 500 }, (_, i) => `inactive1-${i}`);
+    const inactiveChunks2 = Array.from({ length: 150 }, (_, i) => `inactive2-${i}`);
+
+    sessionOutputHistory.set('session-active', activeChunks);
+    sessionOutputHistory.set('session-inactive-1', inactiveChunks1);
+    sessionOutputHistory.set('session-inactive-2', inactiveChunks2);
+
+    trimInactiveSessionHistories(200);
+
+    // Active session should remain untouched (500 chunks)
+    expect(sessionOutputHistory.get('session-active')?.length).toBe(500);
+
+    // Inactive session with >200 chunks trimmed to latest 200 chunks
+    const trimmed1 = sessionOutputHistory.get('session-inactive-1');
+    expect(trimmed1?.length).toBe(200);
+    expect(trimmed1?.[0]).toBe('inactive1-300');
+    expect(trimmed1?.[199]).toBe('inactive1-499');
+
+    // Inactive session with <200 chunks retains its 150 chunks
+    expect(sessionOutputHistory.get('session-inactive-2')?.length).toBe(150);
+  });
+
+  it('executes registered cleanups and logs warning on handleSystemLowMemory', async () => {
+    const { handleSystemLowMemory, registerLowMemoryCleanup, sessionOutputHistory } = await import('../sessionStore');
+
+    sessionOutputHistory.set('session-inactive-1', Array.from({ length: 600 }, (_, i) => `chunk-${i}`));
+
+    const cleanupMock = vi.fn();
+    const unregister = registerLowMemoryCleanup(cleanupMock);
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    handleSystemLowMemory();
+
+    expect(cleanupMock).toHaveBeenCalledTimes(1);
+    expect(sessionOutputHistory.get('session-inactive-1')?.length).toBe(200);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[ShellFerry] System low memory pressure detected, caches trimmed'
+    );
+
+    consoleWarnSpy.mockRestore();
+    unregister();
+  });
+});

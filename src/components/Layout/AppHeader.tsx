@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
-import { Terminal, FolderTree, Columns, Plus, X, Server, RotateCw, XCircle, Settings } from 'lucide-react';
+import { Terminal, FolderTree, Columns, Plus, X, Server, RotateCw, XCircle, Settings, Bug } from 'lucide-react';
 import { SessionConfig } from '../../types';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useBugReportStore } from '../../stores/bugReportStore';
 
 interface AppHeaderProps {
   onOpenNewConnection: () => void;
@@ -175,6 +176,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ onOpenNewConnection }) => 
             </button>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => useBugReportStore.getState().openBugReport()}
+          className="flex items-center justify-center h-[28px] w-[28px] rounded-md text-slate-400 hover:text-white hover:bg-[#1e1e2d] transition-colors cursor-pointer"
+          title="Report Bug / Send Feedback"
+        >
+          <Bug className="h-3.5 w-3.5" />
+        </button>
 
         <button
           type="button"

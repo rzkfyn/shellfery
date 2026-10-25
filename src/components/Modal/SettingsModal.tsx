@@ -21,6 +21,7 @@ import { useUpdateStore } from '../../stores/updateStore';
 import { useSavedConnectionStore } from '../../stores/savedConnectionStore';
 import { useTotpStore } from '../../stores/totpStore';
 import { useBiometricStore } from '../../stores/biometricStore';
+import { useBugReportStore } from '../../stores/bugReportStore';
 import { getBiometricName } from '../../utils/platform';
 import { APP_VERSION } from '../../version';
 import { tauriApi } from '../../services/tauri';
@@ -747,6 +748,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     )}
                   </div>
+
+                  {/* CrashPulse Reporter */}
+                  <div className="flex items-center justify-between p-3.5 gap-3">
+                    <div>
+                      <span className="font-medium text-slate-200">Send anonymous crash reports</span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Helps improve ShellFerry stability by sending sanitized error logs to CrashPulse. No personal data or credentials are ever collected.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={settings.sendCrashReports}
+                        onChange={(e) => updateSetting('sendCrashReports', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-[#11111a] border border-[#2a2b38] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Manual Feedback / Bug Report */}
+                  <div className="flex items-center justify-between p-3.5 gap-3">
+                    <div>
+                      <span className="font-medium text-slate-200">Feedback & Diagnostics</span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Encountered a bug or want to suggest an improvement? Send a report directly.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeSettings();
+                        useBugReportStore.getState().openBugReport();
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-[#1e1e2d] border border-[#2a2b38] hover:border-slate-500 text-slate-200 text-xs font-medium cursor-pointer transition-colors shrink-0"
+                    >
+                      Report an issue or send feedback
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -798,6 +838,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer"
                     >
                       <span>View Changelog</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5">
+                    <div>
+                      <span className="font-medium text-slate-200">Feedback & Bug Reporting</span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Report bugs, UI glitches, or suggest feature ideas</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeSettings();
+                        useBugReportStore.getState().openBugReport();
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-[#1e1e2d] border border-[#2a2b38] hover:border-slate-500 text-slate-200 text-xs font-medium cursor-pointer transition-colors"
+                    >
+                      Report an issue or send feedback
                     </button>
                   </div>
 

@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { reportCrash } from '../../services/crashReporter';
 
 interface Props {
   children: ReactNode;
@@ -24,6 +25,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught component error in view:', error, errorInfo);
+    reportCrash({
+      message: error.message || 'React component error',
+      error,
+      level: 'fatal',
+      componentStack: errorInfo.componentStack ?? undefined,
+    });
   }
 
   private handleReset = () => {

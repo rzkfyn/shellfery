@@ -26,6 +26,7 @@ export interface AppSettings {
   fileDoubleClickAction: 'transfer' | 'edit';
   fileEditorType: FileEditorType;
   customEditorCommand: string;
+  sendCrashReports: boolean;
 }
 
 export const APP_FONT_PRESETS = [
@@ -90,6 +91,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fileDoubleClickAction: 'transfer',
   fileEditorType: 'builtin',
   customEditorCommand: '',
+  sendCrashReports: true,
 };
 
 const STORAGE_KEY = 'openterm_app_settings';
