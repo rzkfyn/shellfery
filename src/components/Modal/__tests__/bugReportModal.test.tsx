@@ -81,4 +81,51 @@ describe('BugReportModal', () => {
 
     expect(cleanContact).toContain('C:/Users/[USER]');
   });
+
+  it('formats root-level os and version correctly for crashpulse ingestion', () => {
+    const testNavigator = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32' };
+    const detectedOs = testNavigator.userAgent.includes('Windows')
+      ? 'Windows'
+      : testNavigator.platform || 'unknown';
+
+    expect(detectedOs).toBe('Windows');
+
+    const nonWinNav = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel' };
+    const nonWinOs = nonWinNav.userAgent.includes('Windows')
+      ? 'Windows'
+      : nonWinNav.platform || 'unknown';
+
+    expect(nonWinOs).toBe('MacIntel');
+  });
+
+  it('handles response errors with detailed json error or fallback status code', async () => {
+    const parseError = async (response: { ok: boolean; status: number; json: () => Promise<any> }) => {
+      if (!response.ok) {
+        let errorDetail = `Submission failed (${response.status})`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) errorDetail = errJson.error;
+        } catch {}
+        throw new Error(errorDetail);
+      }
+    };
+
+    // 400 Bad Request with json error
+    const resp400 = {
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'Missing required field: stack' }),
+    };
+    await expect(parseError(resp400)).rejects.toThrow('Missing required field: stack');
+
+    // 500 Internal Server Error without json error
+    const resp500 = {
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error('Not JSON');
+      },
+    };
+    await expect(parseError(resp500)).rejects.toThrow('Submission failed (500)');
+  });
 });

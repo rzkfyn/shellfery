@@ -57,6 +57,10 @@ export const BugReportModal: React.FC = () => {
 
   const payload = {
     app: 'shellferry',
+    version: APP_VERSION,
+    os: typeof navigator !== 'undefined'
+      ? (navigator.userAgent.includes('Windows') ? 'Windows' : navigator.platform || 'unknown')
+      : 'unknown',
     level: category === 'Bug Report' ? 'warning' : 'info',
     message: `[Feedback: ${category}] ${sanitizedTitle || '<summary>'}`,
     stack: sanitizedDesc + (sanitizedContact ? `\nContact: ${sanitizedContact}` : ''),
@@ -115,8 +119,13 @@ export const BugReportModal: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok && response.status >= 500) {
-        throw new Error(`Submission failed with status ${response.status}`);
+      if (!response.ok) {
+        let errorDetail = `Submission failed (${response.status})`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) errorDetail = errJson.error;
+        } catch {}
+        throw new Error(errorDetail);
       }
 
       setSubmitted(true);
