@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use ssh2::{CheckResult, KnownHostFileKind, Session};
+use ssh2::{CheckResult, KnownHostFileKind, MethodType, Session};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc::unbounded_channel;
 use uuid::Uuid;
@@ -125,6 +125,137 @@ fn authenticate_pubkey(
         .map_err(|e| format!("Public key authentication failed: {}", e))
 }
 
+/// Map an OpenSSH known_hosts key type to ordered candidate algorithms
+fn map_key_type_to_algs(key_type: &str) -> &'static [&'static str] {
+    match key_type {
+        "ssh-rsa" => &["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"],
+        "ssh-ed25519" => &["ssh-ed25519"],
+        "ecdsa-sha2-nistp256" => &["ecdsa-sha2-nistp256"],
+        "ecdsa-sha2-nistp384" => &["ecdsa-sha2-nistp384"],
+        "ecdsa-sha2-nistp521" => &["ecdsa-sha2-nistp521"],
+        "rsa-sha2-512" => &["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"],
+        "rsa-sha2-256" => &["rsa-sha2-256", "rsa-sha2-512", "ssh-rsa"],
+        _ => &[],
+    }
+}
+
+/// Pure function to build the host key algorithm preference list.
+/// Known key type algorithms come first, followed by remaining supported algorithms
+/// in original order. Unrecognized/unsupported names are skipped and duplicates removed.
+pub fn build_hostkey_preference(known_types: &[&str], supported_algs: &[&str]) -> String {
+    let mut list: Vec<&str> = Vec::new();
+
+    for &kt in known_types {
+        for &alg in map_key_type_to_algs(kt) {
+            if supported_algs.contains(&alg) && !list.contains(&alg) {
+                list.push(alg);
+            }
+        }
+    }
+
+    for &alg in supported_algs {
+        if !list.contains(&alg) {
+            list.push(alg);
+        }
+    }
+
+    list.join(",")
+}
+
+/// Parse known_hosts file content and collect key types for the specified host and port.
+/// Plain `host` for port 22, `[host]:port` for other ports. Hashed `|1|` entries are skipped.
+fn collect_known_key_types_from_str(content: &str, host: &str, port: u16) -> Vec<String> {
+    let target = if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{}]:{}", host, port)
+    };
+    let alt_target_22 = if port == 22 {
+        Some(format!("[{}]:22", host))
+    } else {
+        None
+    };
+
+    let mut key_types = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let mut tokens = trimmed.split_whitespace();
+        let first = match tokens.next() {
+            Some(t) => t,
+            None => continue,
+        };
+        if first.starts_with("|1|") {
+            continue;
+        }
+
+        let (host_patterns, key_type) = if first.starts_with('@') {
+            let h = match tokens.next() {
+                Some(t) => t,
+                None => continue,
+            };
+            if h.starts_with("|1|") {
+                continue;
+            }
+            let kt = match tokens.next() {
+                Some(t) => t,
+                None => continue,
+            };
+            (h, kt)
+        } else {
+            let kt = match tokens.next() {
+                Some(t) => t,
+                None => continue,
+            };
+            (first, kt)
+        };
+
+        let matches_host = host_patterns.split(',').any(|pattern| {
+            pattern == target || alt_target_22.as_deref() == Some(pattern)
+        });
+
+        if matches_host && !key_types.iter().any(|k| k == key_type) {
+            key_types.push(key_type.to_string());
+        }
+    }
+
+    key_types
+}
+
+/// Helper called right before `handshake()`.
+/// Reads `~/.ssh/known_hosts`, finds known key types for `host:port`, and prioritizes
+/// them via `sess.method_pref(MethodType::HostKey, ...)`.
+/// Best effort: all failures are silently ignored, never failing the connection.
+fn prefer_known_host_key_algs(sess: &Session, host: &str, port: u16) {
+    let known_hosts_path = match dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts")) {
+        Some(p) => p,
+        None => return,
+    };
+    if !known_hosts_path.exists() {
+        return;
+    }
+    let content = match std::fs::read_to_string(known_hosts_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let known_types = collect_known_key_types_from_str(&content, host, port);
+    if known_types.is_empty() {
+        return;
+    }
+    let supported = match sess.supported_algs(MethodType::HostKey) {
+        Ok(algs) => algs,
+        Err(_) => return,
+    };
+    let known_refs: Vec<&str> = known_types.iter().map(|s| s.as_str()).collect();
+    let pref = build_hostkey_preference(&known_refs, &supported);
+    if !pref.is_empty() {
+        let _ = sess.method_pref(MethodType::HostKey, &pref);
+    }
+}
+
 /// Verify SSH host key against known_hosts (prevents MITM)
 fn verify_host_key(sess: &Session, host: &str, port: u16) -> Result<(), String> {
     let mut known_hosts = sess
@@ -207,6 +338,7 @@ pub fn connect_ssh(
     // 2. Init SSH Session
     let mut sess = Session::new().map_err(|e| format!("Failed to init SSH session: {}", e))?;
     sess.set_tcp_stream(tcp);
+    prefer_known_host_key_algs(&sess, &config.host, config.port);
     sess.handshake()
         .map_err(|e| format!("SSH handshake failed: {}", e))?;
 
@@ -403,6 +535,7 @@ pub fn connect_ssh(
 
         let mut sftp_sess = Session::new().map_err(|e| format!("{}", e))?;
         sftp_sess.set_tcp_stream(sftp_tcp);
+        prefer_known_host_key_algs(&sftp_sess, &config.host, config.port);
         sftp_sess.handshake().map_err(|e| format!("{}", e))?;
         verify_host_key(&sftp_sess, &config.host, config.port)?;
 
@@ -577,5 +710,109 @@ eDkEexFak+Pwx5dyHwNQAAAABHRlc3QB\n\
         assert!(priv_str.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----"));
     }
 
+    #[test]
+    fn test_preference_rsa_only_known() {
+        let supported = [
+            "ssh-ed25519",
+            "ecdsa-sha2-nistp256",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp521",
+            "rsa-sha2-512",
+            "rsa-sha2-256",
+            "ssh-rsa",
+        ];
+        let pref = build_hostkey_preference(&["ssh-rsa"], &supported);
+        assert!(pref.starts_with("rsa-sha2-512,rsa-sha2-256,ssh-rsa"));
+        assert_eq!(
+            pref,
+            "rsa-sha2-512,rsa-sha2-256,ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521"
+        );
+    }
 
+    #[test]
+    fn test_preference_ed25519_known() {
+        let supported = [
+            "rsa-sha2-512",
+            "rsa-sha2-256",
+            "ssh-rsa",
+            "ssh-ed25519",
+        ];
+        let pref = build_hostkey_preference(&["ssh-ed25519"], &supported);
+        assert!(pref.starts_with("ssh-ed25519"));
+        assert_eq!(
+            pref,
+            "ssh-ed25519,rsa-sha2-512,rsa-sha2-256,ssh-rsa"
+        );
+    }
+
+    #[test]
+    fn test_preference_unknown_and_unsupported_skipped() {
+        let supported = ["ssh-rsa", "ssh-ed25519"];
+        let pref = build_hostkey_preference(
+            &["unknown-algo", "ssh-dss", "ssh-rsa"],
+            &supported,
+        );
+        assert_eq!(pref, "ssh-rsa,ssh-ed25519");
+    }
+
+    #[test]
+    fn test_preference_no_duplicates() {
+        let supported = ["ssh-rsa", "rsa-sha2-512", "ssh-ed25519"];
+        let pref = build_hostkey_preference(&["ssh-rsa", "ssh-rsa"], &supported);
+        assert_eq!(pref, "rsa-sha2-512,ssh-rsa,ssh-ed25519");
+        let items: Vec<&str> = pref.split(',').collect();
+        let mut deduped = items.clone();
+        deduped.dedup();
+        assert_eq!(items, deduped);
+    }
+
+    #[test]
+    fn test_preference_empty_known_list() {
+        let supported = ["ssh-ed25519", "rsa-sha2-512", "ssh-rsa"];
+        let pref = build_hostkey_preference(&[], &supported);
+        assert_eq!(pref, "ssh-ed25519,rsa-sha2-512,ssh-rsa");
+    }
+
+    #[test]
+    fn test_empty_known_list_no_preference() {
+        let content = "43.129.54.11 ssh-rsa AAAA... OpenTerm\n";
+        let types = collect_known_key_types_from_str(content, "different.host.com", 22);
+        assert!(types.is_empty());
+    }
+
+    #[test]
+    fn test_collect_known_key_types_formats() {
+        let content = r#"
+# Comment line
+43.129.54.11 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... OpenTerm host key
+[43.129.54.11]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... non-standard port
+|1|hashed123|salt456 ssh-rsa HASHED_KEY...
+host1.com,host2.com ecdsa-sha2-nistp256 AAAAE2VjZHNh... multi-host
+@cert-authority cert-host ssh-rsa CERT_KEY... marker
+"#;
+        assert_eq!(
+            collect_known_key_types_from_str(content, "43.129.54.11", 22),
+            vec!["ssh-rsa"]
+        );
+        assert_eq!(
+            collect_known_key_types_from_str(content, "43.129.54.11", 2222),
+            vec!["ssh-ed25519"]
+        );
+        assert_eq!(
+            collect_known_key_types_from_str(content, "43.129.54.11", 8080),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            collect_known_key_types_from_str(content, "host1.com", 22),
+            vec!["ecdsa-sha2-nistp256"]
+        );
+        assert_eq!(
+            collect_known_key_types_from_str(content, "host2.com", 22),
+            vec!["ecdsa-sha2-nistp256"]
+        );
+        assert_eq!(
+            collect_known_key_types_from_str(content, "cert-host", 22),
+            vec!["ssh-rsa"]
+        );
+    }
 }
