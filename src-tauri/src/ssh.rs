@@ -108,10 +108,9 @@ fn authenticate_pubkey(
             .to_openssh()
             .map_err(|e| format!("Failed to export OpenSSH public key: {}", e))?;
 
-        // Attempt in-memory auth first
-        if let Ok(()) = sess.userauth_pubkey_memory(username, Some(&openssh_pub), &openssh_priv, None) {
-            return Ok(());
-        }
+        return sess
+            .userauth_pubkey_memory(username, Some(&openssh_pub), &openssh_priv, None)
+            .map_err(|e| format!("Public key authentication failed: {}", e));
     }
 
     // Strategy 3: Standard OpenSSL PEM / PKCS#8 file auth with companion .pub if exists
